@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Box, Stethoscope, ScanLine, Sun, Moon } from "lucide-react";
@@ -20,12 +20,41 @@ export default function RadiologyHomePage() {
   const { locale, setLocale } = useAtlasLocale();
 
   useEffect(() => {
-    setMounted(true);
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   useEffect(() => {
     if (mounted && !enabled) toggle();
   }, [mounted, enabled, toggle]);
+
+  if (!mounted) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "14px",
+          background: "radial-gradient(circle at 50% 35%, #0f1b38 0%, #060913 75%)",
+          color: "#e2e8f0",
+          fontFamily: "system-ui, -apple-system, sans-serif",
+        }}
+      >
+        <img
+          src="/icon.png"
+          alt="Code Blue Radiology"
+          style={{ width: 68, height: 68, borderRadius: 16, boxShadow: "0 0 30px rgba(34,211,238,0.35)" }}
+        />
+        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.04em" }}>CODE BLUE RADIOLOGY</div>
+        <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading Radiology &amp; AI Studio...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-transparent text-slate-100 flex flex-col">
@@ -80,7 +109,7 @@ export default function RadiologyHomePage() {
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        {mounted && !enabled && (
+        {!enabled && (
           <button
             type="button"
             onClick={() => toggle()}
@@ -89,7 +118,7 @@ export default function RadiologyHomePage() {
             {locale === "ar" ? "فتح استوديو الأشعة والتشخيص الذكي" : "Open Radiology & AI Scan Studio"}
           </button>
         )}
-        {mounted && <ScanControls />}
+        <ScanControls />
       </main>
     </div>
   );
