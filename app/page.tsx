@@ -76,20 +76,6 @@ export default function RadiologyHomePage() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>{locale === "ar" ? "بنك الأسئلة" : "Main Bank"}</span>
           </a>
-          <a
-            href={SOUNDS_URL}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition"
-          >
-            <Stethoscope className="w-3.5 h-3.5" />
-            <span>{locale === "ar" ? "أصوات القلب والصدر" : "Sounds & ECG"}</span>
-          </a>
-          <a
-            href={ATLAS_URL}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/30 transition"
-          >
-            <Box className="w-3.5 h-3.5" />
-            <span>{locale === "ar" ? "الأطلس 3D" : "3D Atlas"}</span>
-          </a>
           <button
             type="button"
             onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
