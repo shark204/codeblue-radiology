@@ -1,17 +1,18 @@
 'use client';
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, Box, Stethoscope, ScanLine, Sun, Moon } from "lucide-react";
 import ScanControls from "@/features/viewer/AxialView";
 import { useScanStore } from "@/stores/scanStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useAtlasLocale } from "@/lib/atlasI18n";
 
-const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "http://localhost:3000";
-const SOUNDS_URL = process.env.NEXT_PUBLIC_SOUNDS_URL || "http://localhost:3002";
-const ATLAS_URL = process.env.NEXT_PUBLIC_ATLAS_URL || "http://localhost:3003";
+const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "https://mrcs-bank.vercel.app";
+const SOUNDS_URL = process.env.NEXT_PUBLIC_SOUNDS_URL || "https://codeblue-sounds.vercel.app";
+const ATLAS_URL = process.env.NEXT_PUBLIC_ATLAS_URL || "https://codeblue-atlas.vercel.app";
 
 export default function RadiologyHomePage() {
+  const [mounted, setMounted] = useState(false);
   const enabled = useScanStore((s) => s.enabled);
   const toggle = useScanStore((s) => s.toggle);
   const theme = useUIStore((s) => s.theme);
@@ -19,13 +20,16 @@ export default function RadiologyHomePage() {
   const { locale, setLocale } = useAtlasLocale();
 
   useEffect(() => {
-    if (!enabled) toggle();
-  }, [enabled, toggle]);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !enabled) toggle();
+  }, [mounted, enabled, toggle]);
 
   return (
-    <div className="min-h-screen w-full bg-[#060913] text-slate-100 flex flex-col">
-      {/* Compact cross-site navigation bar visible behind/above portal */}
-      <header className="sticky top-0 z-40 h-12 px-4 border-b border-slate-800/80 bg-[#070b16]/95 backdrop-blur-md flex items-center justify-between gap-3">
+    <div className="min-h-screen w-full bg-transparent text-slate-100 flex flex-col">
+      <header className="sticky top-0 z-40 h-12 px-4 border-b border-slate-800/80 bg-[#070b16]/80 backdrop-blur-md flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
             <ScanLine className="w-4 h-4" />
@@ -76,7 +80,7 @@ export default function RadiologyHomePage() {
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        {!enabled && (
+        {mounted && !enabled && (
           <button
             type="button"
             onClick={() => toggle()}
@@ -85,7 +89,7 @@ export default function RadiologyHomePage() {
             {locale === "ar" ? "فتح استوديو الأشعة والتشخيص الذكي" : "Open Radiology & AI Scan Studio"}
           </button>
         )}
-        <ScanControls />
+        {mounted && <ScanControls />}
       </main>
     </div>
   );
