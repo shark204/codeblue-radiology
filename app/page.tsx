@@ -39,6 +39,17 @@ export default function RadiologyHomePage() {
     if (mounted && view === "workspace" && !enabled) toggle();
   }, [mounted, view, enabled, toggle]);
 
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("codeblue_theme", theme);
+      localStorage.removeItem("sky:mode-override");
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      document.documentElement.classList.toggle("light", theme === "light");
+    } catch {}
+  }, [theme]);
+
   const handleToggleTheme = () => {
     toggleTheme();
     const next = theme === "dark" ? "light" : "dark";
@@ -188,9 +199,21 @@ export default function RadiologyHomePage() {
                     isLight ? "text-slate-600" : "text-slate-300"
                   }`}
                 >
-                  {isAr
-                    ? "أطلس الحالات الإشعاعية السريرية الحقيقية ومحرك التحليل الذكي متعدد المراحل لقراءة أشعة الصدر والدماغ والقلب والبطن."
-                    : "Real PACS clinical radiology atlas paired with a 12-stage AI diagnostic reasoning engine across CXR, Chest CT, Brain CT, Echo, and Abdomen US."}
+                  {isAr ? (
+                    <>
+                      أطلس الحالات الإشعاعية السريرية الحقيقية{" "}
+                      <span className={isLight ? "text-sky-700 font-extrabold" : "text-sky-300 font-extrabold"}>
+                        ومحرك التحليل الذكي متعدد المراحل
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Real PACS clinical radiology atlas paired with a{" "}
+                      <span className={isLight ? "text-sky-700 font-extrabold" : "text-sky-300 font-extrabold"}>
+                        12-stage AI diagnostic reasoning engine
+                      </span>
+                    </>
+                  )}
                 </p>
                 <div className="pt-1">
                   <button
@@ -285,10 +308,10 @@ export default function RadiologyHomePage() {
             {/* Right / Transparent PNG Hero Visual (Non-clickable) */}
             <div className="lg:col-span-6 flex items-center justify-center">
               <img
-                src="/hero-radiology.png?v=2"
+                src="/hero-radiology.png?v=3"
                 alt="Code Blue Radiology AI Workspace"
                 draggable={false}
-                className="w-full max-w-[540px] max-h-[68vh] h-auto object-contain select-none pointer-events-none drop-shadow-[0_20px_45px_rgba(34,211,238,0.28)]"
+                className={`w-full max-w-[540px] max-h-[68vh] h-auto object-contain select-none pointer-events-none ${isLight ? "drop-shadow-[0_0_26px_rgba(255,255,255,0.9)]" : "drop-shadow-[0_20px_45px_rgba(56,189,248,0.28)]"}`}
               />
             </div>
           </div>
