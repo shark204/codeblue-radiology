@@ -5,8 +5,31 @@ import "./glass-theme.css";
 import SkyBackground from "@/components/SkyBackground";
 
 export const metadata: Metadata = {
-  title: "codeblue-radiology",
-  description: "Standalone Radiology Basics, Real Clinical Scans & Signs Atlas, and 12-Stage AI Diagnostic Engine.",
+  metadataBase: new URL("https://codeblue-radiology.vercel.app"),
+  title: "Code Blue — Radiology",
+  description: "12-Stage AI Diagnostic Engine, Radiology Basics, and Real Clinical Scans & Signs Atlas.",
+  openGraph: {
+    title: "Code Blue — Radiology",
+    description: "12-Stage AI Diagnostic Engine, Radiology Basics, and Real Clinical Scans & Signs Atlas.",
+    url: "https://codeblue-radiology.vercel.app",
+    siteName: "Code Blue — Radiology",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Code Blue — 12-Stage AI Diagnostic Engine & Clinical Scans Atlas",
+        type: "image/jpeg",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Code Blue — Radiology",
+    description: "12-Stage AI Diagnostic Engine, Radiology Basics, and Real Clinical Scans & Signs Atlas.",
+    images: ["/og-image.jpg"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
