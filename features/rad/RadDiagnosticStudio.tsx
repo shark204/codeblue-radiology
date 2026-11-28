@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, AlertOctagon, AlertTriangle, ArrowDown, CheckCircle2, ChevronLeft, ChevronRight,
   Download, Eye, Flame, FlaskConical, ImagePlus, Layers, Loader2, Minus, Pill, Plus,
-  RotateCcw, ScanLine, ShieldAlert, Sparkles, ZoomIn, ZoomOut,
+  RotateCcw, ShieldAlert, Sparkles, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { useAtlasLocale } from "@/lib/atlasI18n";
 import { useUIStore } from "@/stores/uiStore";
@@ -26,15 +26,6 @@ const WINDOW_PRESETS = [
   { id: "invert", labelEn: "Invert", labelAr: "عكس", filter: "invert(1) contrast(1.15)" },
 ] as const;
 
-const MODALITY_OPTIONS: { id: "auto" | RadModality; en: string; ar: string }[] = [
-  { id: "auto", en: "Auto-Detect", ar: "تلقائي" },
-  { id: "chest_xray", en: "Chest X-Ray", ar: "أشعة صدر" },
-  { id: "chest_ct", en: "Chest CT", ar: "مقطعية صدر" },
-  { id: "neuro_ct", en: "Brain CT/MRI", ar: "أشعة مخ" },
-  { id: "abdomen_us", en: "Abdomen US", ar: "سونار بطن" },
-  { id: "echo", en: "Echo", ar: "إيكو قلب" },
-];
-
 export function RadDiagnosticStudio() {
   const { locale } = useAtlasLocale();
   const theme = useUIStore((s) => s.theme);
@@ -43,7 +34,6 @@ export function RadDiagnosticStudio() {
 
   const [scanUrl, setScanUrl] = useState<string | null>(null);
   const [scanName, setScanName] = useState<string>("");
-  const [modalityHint, setModalityHint] = useState<"auto" | RadModality>("auto");
   const [winPreset, setWinPreset] = useState<string>("classic");
   const [zoom, setZoom] = useState<number>(1);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -67,13 +57,12 @@ export function RadDiagnosticStudio() {
     return () => io.disconnect();
   }, [scanUrl, showResults]);
 
-  const activeModality: RadModality =
-    modalityHint !== "auto" ? modalityHint : (remote?.detected_modality ?? "chest_xray");
+  const activeModality: RadModality = remote?.detected_modality ?? "chest_xray";
 
   const hybridResult: RadHybridResult | null = useMemo(() => {
     if (!remote || remote.invalid_scan) return null;
-    return runHybridRadiologyDiagnosis(remote, ctx, modalityHint === "auto" ? undefined : modalityHint);
-  }, [remote, ctx, modalityHint]);
+    return runHybridRadiologyDiagnosis(remote, ctx, undefined);
+  }, [remote, ctx]);
 
   const handleFile = async (file: File | null | undefined) => {
     if (!file) return;
@@ -88,7 +77,7 @@ export function RadDiagnosticStudio() {
     try {
       const fd = new FormData();
       fd.append("file", file, file.name || "scan.jpg");
-      fd.append("modality_hint", modalityHint);
+      fd.append("modality_hint", "auto");
       const res = await fetch(`${RAD_API_URL.replace(/\/$/, "")}/analyze-radiology`, {
         method: "POST",
         body: fd,
@@ -143,65 +132,34 @@ export function RadDiagnosticStudio() {
   return (
     <div dir={isAr ? "rtl" : "ltr"} className="h-[calc(100dvh-56px)] overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
       <div className="mx-auto max-w-7xl space-y-3 pb-16">
-        {/* Compact Studio Header */}
-        <div className={`rounded-2xl border px-3.5 py-2.5 flex items-center justify-between gap-2 ${cardCls}`}>
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
-              <ScanLine className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm sm:text-base font-black truncate">
-                {isAr ? "استوديو تشخيص الأشعة الذكي v2" : "AI Radiology Diagnostic Studio v2"}
-              </div>
-              <div className={`text-[10.5px] font-semibold truncate ${isLight ? "text-cyan-700" : "text-cyan-300/80"}`}>
-                {isAr ? "5 تخصصات أشعة · ConvNeXt-Small 50M + Grad-CAM + مصائد الأمان" : "5 Modalities · ConvNeXt-Small 50M + Grad-CAM + Safety Traps"}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={resetAll}
-            disabled={!scanUrl && !showResults}
-            className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold cursor-pointer disabled:opacity-40 ${chipOff}`}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>{isAr ? "حالة جديدة" : "New Case"}</span>
-          </button>
-        </div>
-
         {/* Main 2-Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
-          {/* LEFT: Scan Uploader + Windowing + Grad-CAM */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+          {/* LEFT: Auto-Detect Scan Uploader + Windowing + Grad-CAM */}
           <div className="lg:col-span-5 space-y-3">
             <div className={`${showResults ? "hidden lg:block " : ""}rounded-2xl border p-3.5 space-y-3 ${cardCls}`}>
-              {/* Modality Pills */}
-              <div className="flex flex-wrap gap-1.5">
-                {MODALITY_OPTIONS.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setModalityHint(m.id)}
-                    className={`px-2.5 py-1 rounded-full border text-[11px] font-bold cursor-pointer transition ${modalityHint === m.id ? chipOn : chipOff}`}
-                  >
-                    {isAr ? m.ar : m.en}
-                  </button>
-                ))}
-              </div>
-
               {scanUrl ? (
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-extrabold truncate flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                      {scanName || "Scan"}
+                      <Layers className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span className="truncate">{scanName || "Scan"}</span>
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button type="button" onClick={() => setZoom((z) => Math.max(1, Number((z - 0.5).toFixed(1))))} className={`p-1.5 rounded-lg border cursor-pointer ${chipOff}`}>
                         <ZoomOut className="w-3.5 h-3.5" />
                       </button>
                       <span className="text-[11px] font-mono px-1">{Math.round(zoom * 100)}%</span>
                       <button type="button" onClick={() => setZoom((z) => Math.min(3, Number((z + 0.5).toFixed(1))))} className={`p-1.5 rounded-lg border cursor-pointer ${chipOff}`}>
                         <ZoomIn className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetAll}
+                        title={isAr ? "حالة جديدة" : "New Case"}
+                        className={`ms-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer ${chipOff}`}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>{isAr ? "جديد" : "New"}</span>
                       </button>
                     </div>
                   </div>
@@ -229,10 +187,13 @@ export function RadDiagnosticStudio() {
                   </div>
                 </div>
               ) : (
-                <label className={`flex flex-col items-center justify-center gap-2.5 min-h-[180px] rounded-2xl border-2 border-dashed p-5 cursor-pointer transition ${isLight ? "border-cyan-400/80 bg-cyan-50/40 hover:bg-cyan-50" : "border-cyan-400/35 bg-cyan-500/5 hover:border-cyan-400/70"}`}>
+                <label className={`flex flex-col items-center justify-center gap-2.5 min-h-[210px] rounded-2xl border-2 border-dashed p-5 cursor-pointer transition ${isLight ? "border-cyan-400/80 bg-cyan-50/40 hover:bg-cyan-50" : "border-cyan-400/35 bg-cyan-500/5 hover:border-cyan-400/70"}`}>
                   <ImagePlus className="w-8 h-8 text-cyan-400" />
                   <div className="text-xs sm:text-sm font-extrabold text-center">
-                    {isAr ? "اضغط أو اسحب صورة الأشعة هنا (CXR / CT / MRI / US / Echo)" : "Drop or tap to upload Radiology Scan (CXR / CT / MRI / US / Echo)"}
+                    {isAr ? "اضغط أو اسحب صورة الأشعة هنا — تعرّف تلقائي على النوع" : "Drop or tap to upload any Radiology Scan — Auto-Detect"}
+                  </div>
+                  <div className={`text-[11px] font-semibold ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                    CXR · Chest CT · Brain CT/MRI · Abdomen US · Echo
                   </div>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => void handleFile(e.target.files?.[0])} />
                 </label>
@@ -241,7 +202,7 @@ export function RadDiagnosticStudio() {
               {analyzing && (
                 <div className="rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-200 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  <span>{isAr ? "جاري توجيه الأشعة وتحليلها بالذكاء البصري..." : "Routing modality & running deep visual analysis..."}</span>
+                  <span>{isAr ? "جاري التعرف التلقائي على الأشعة وتحليلها..." : "Auto-detecting modality & running deep visual analysis..."}</span>
                 </div>
               )}
 
@@ -256,7 +217,7 @@ export function RadDiagnosticStudio() {
                 <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-300 flex items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    {isAr ? `تم التحليل (${activeModality.toUpperCase()})` : `Analyzed (${activeModality.toUpperCase()})`}
+                    {isAr ? `تم التعرف والتحليل (${activeModality.toUpperCase()})` : `Auto-Detected: ${activeModality.toUpperCase()}`}
                   </span>
                   {remote.measurements?.ctr_ratio && (
                     <span className="font-mono text-[11px]">CTR ~ {remote.measurements.ctr_ratio}</span>
@@ -282,11 +243,11 @@ export function RadDiagnosticStudio() {
             )}
           </div>
 
-          {/* RIGHT: 3 Clinical Context Cards OR Hybrid Results */}
+          {/* RIGHT: Detached 3-Step Bar + Clinical Context Panel OR Hybrid Results */}
           <div ref={cardsRef} className="lg:col-span-7 space-y-3">
             {!showResults ? (
-              <div className={`rounded-2xl border p-4 sm:p-5 space-y-4 ${cardCls}`}>
-                {/* Stepper Pills */}
+              <>
+                {/* Detached Standalone Stepper Bar */}
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { n: 1, ar: "1. الحالة والحيويات", en: "1. Vitals & Onset" },
@@ -297,111 +258,114 @@ export function RadDiagnosticStudio() {
                       key={s.n}
                       type="button"
                       onClick={() => setStep(s.n)}
-                      className={`py-2 px-2 rounded-xl border text-[11px] sm:text-xs font-extrabold cursor-pointer transition ${step === s.n ? chipOn : chipOff}`}
+                      className={`py-2.5 px-2.5 rounded-2xl border text-[11px] sm:text-xs font-extrabold cursor-pointer backdrop-blur-xl transition ${step === s.n ? chipOn : cardCls}`}
                     >
                       {isAr ? s.ar : s.en}
                     </button>
                   ))}
                 </div>
 
-                {step === 1 && (
-                  <div className="space-y-3.5">
-                    <div className="space-y-1.5">
-                      <div className="text-xs font-extrabold">{isAr ? "بداية الأعراض (Onset):" : "Symptom Onset:"}</div>
+                {/* Clinical Context Card Panel */}
+                <div className={`rounded-2xl border p-4 sm:p-5 space-y-4 ${cardCls}`}>
+                  {step === 1 && (
+                    <div className="space-y-3.5">
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-extrabold">{isAr ? "بداية الأعراض (Onset):" : "Symptom Onset:"}</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["acute", "subacute", "chronic"] as const).map((o) => (
+                            <button key={o} type="button" onClick={() => setCtx((p) => ({ ...p, onset: o }))} className={`py-2.5 rounded-xl border text-xs font-bold cursor-pointer ${ctx.onset === o ? chipOn : chipOff}`}>
+                              {o === "acute" ? (isAr ? "حاد (<48 ساعة)" : "Acute (<48h)") : o === "subacute" ? (isAr ? "تحت حاد (أيام)" : "Subacute") : (isAr ? "مزمن (أسابيع+)" : "Chronic")}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-extrabold">{isAr ? "الاستقرار الديناميكي (Hemodynamics):" : "Hemodynamic Status:"}</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button" onClick={() => setCtx((p) => ({ ...p, hemodynamics: "stable" }))} className={`py-2.5 rounded-xl border text-xs font-bold cursor-pointer ${ctx.hemodynamics === "stable" ? chipOn : chipOff}`}>
+                            {isAr ? "مستقر / واعي" : "Stable / Alert"}
+                          </button>
+                          <button type="button" onClick={() => setCtx((p) => ({ ...p, hemodynamics: "unstable" }))} className={`py-2.5 rounded-xl border text-xs font-bold cursor-pointer ${ctx.hemodynamics === "unstable" ? "border-rose-500 bg-rose-600 text-white" : chipOff}`}>
+                            {isAr ? "غير مستقر / صدمة" : "Unstable / Shock"}
+                          </button>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-3 gap-2">
-                        {(["acute", "subacute", "chronic"] as const).map((o) => (
-                          <button key={o} type="button" onClick={() => setCtx((p) => ({ ...p, onset: o }))} className={`py-2.5 rounded-xl border text-xs font-bold cursor-pointer ${ctx.onset === o ? chipOn : chipOff}`}>
-                            {o === "acute" ? (isAr ? "حاد (<48 ساعة)" : "Acute (<48h)") : o === "subacute" ? (isAr ? "تحت حاد (أيام)" : "Subacute") : (isAr ? "مزمن (أسابيع+)" : "Chronic")}
+                        {[
+                          { k: "fever" as const, ar: "حرارة / عدوى", en: "Fever" },
+                          { k: "hypoxia" as const, ar: "نقص أكسجين SpO2", en: "Hypoxia (SpO2<92%)" },
+                          { k: "trauma" as const, ar: "إصابة / حادث", en: "Trauma" },
+                        ].map((t) => (
+                          <button key={t.k} type="button" onClick={() => setCtx((p) => ({ ...p, [t.k]: !p[t.k] }))} className={`py-2.5 px-2 rounded-xl border text-xs font-bold cursor-pointer ${ctx[t.k] ? chipOn : chipOff}`}>
+                            {isAr ? t.ar : t.en}
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <div className="text-xs font-extrabold">{isAr ? "الاستقرار الديناميكي (Hemodynamics):" : "Hemodynamic Status:"}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => setCtx((p) => ({ ...p, hemodynamics: "stable" }))} className={`py-2.5 rounded-xl border text-xs font-bold cursor-pointer ${ctx.hemodynamics === "stable" ? chipOn : chipOff}`}>
-                          {isAr ? "مستقر / واعي" : "Stable / Alert"}
-                        </button>
-                        <button type="button" onClick={() => setCtx((p) => ({ ...p, hemodynamics: "unstable" }))} className={`py-2.5 rounded-xl border text-xs font-bold cursor-pointer ${ctx.hemodynamics === "unstable" ? "border-rose-500 bg-rose-600 text-white" : chipOff}`}>
-                          {isAr ? "غير مستقر / صدمة" : "Unstable / Shock"}
-                        </button>
+                  )}
+
+                  {step === 2 && (
+                    <div className="space-y-2.5">
+                      <div className="text-xs font-extrabold">
+                        {isAr ? `أعراض المريض (${activeModality.toUpperCase()}):` : `Presenting Symptoms (${activeModality.toUpperCase()}):`}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {(MODALITY_SYMPTOMS[activeModality] || []).map((sym) => {
+                          const on = ctx.symptoms.includes(sym.id);
+                          return (
+                            <button key={sym.id} type="button" onClick={() => toggleSymptom(sym.id)} className={`p-2.5 rounded-xl border text-xs font-bold text-start cursor-pointer transition ${on ? chipOn : chipOff}`}>
+                              {isAr ? sym.ar : sym.en}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { k: "fever" as const, ar: "حرارة / عدوى", en: "Fever" },
-                        { k: "hypoxia" as const, ar: "نقص أكسجين SpO2", en: "Hypoxia (SpO2<92%)" },
-                        { k: "trauma" as const, ar: "إصابة / حادث", en: "Trauma" },
-                      ].map((t) => (
-                        <button key={t.k} type="button" onClick={() => setCtx((p) => ({ ...p, [t.k]: !p[t.k] }))} className={`py-2.5 px-2 rounded-xl border text-xs font-bold cursor-pointer ${ctx[t.k] ? chipOn : chipOff}`}>
-                          {isAr ? t.ar : t.en}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {step === 2 && (
-                  <div className="space-y-2.5">
-                    <div className="text-xs font-extrabold">
-                      {isAr ? `أعراض المريض (${activeModality.toUpperCase()}):` : `Presenting Symptoms (${activeModality.toUpperCase()}):`}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {(MODALITY_SYMPTOMS[activeModality] || []).map((sym) => {
-                        const on = ctx.symptoms.includes(sym.id);
-                        return (
-                          <button key={sym.id} type="button" onClick={() => toggleSymptom(sym.id)} className={`p-2.5 rounded-xl border text-xs font-bold text-start cursor-pointer transition ${on ? chipOn : chipOff}`}>
-                            {isAr ? sym.ar : sym.en}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {step === 3 && (
-                  <div className="space-y-2.5">
-                    <div className="text-xs font-extrabold">{isAr ? "عوامل الخطورة ومصائد الأمان:" : "Risk Factors & Clinical Safety Traps:"}</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {[
-                        { k: "anticoagulants" as const, ar: "يتناول مسيلات دم (Warfarin / DOAC)", en: "On Anticoagulants" },
-                        { k: "dvtPeRisk" as const, ar: "خطورة جلطة ساق / رئة (DVT/PE)", en: "DVT / PE Risk Factors" },
-                        { k: "malignancyOrSmoking" as const, ar: "تدخين شديد أو تاريخ أورام", en: "Heavy Smoking / Malignancy" },
-                        { k: "immunosuppressedOrTb" as const, ar: "ضعف مناعة أو مخالطة درن (TB)", en: "Immunocompromised / TB Exposure" },
-                        { k: "postProcedure" as const, ar: "بعد قسطرة مركزية / إجراء بالصدر", en: "Post Central-Line / Chest Procedure" },
-                      ].map((rf) => (
-                        <button key={rf.k} type="button" onClick={() => setCtx((p) => ({ ...p, [rf.k]: !p[rf.k] }))} className={`p-2.5 rounded-xl border text-xs font-bold text-start cursor-pointer transition ${ctx[rf.k] ? chipOn : chipOff}`}>
-                          {isAr ? rf.ar : rf.en}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Unified Bottom Navigation */}
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
-                  <button type="button" disabled={step === 1} onClick={() => setStep((s) => Math.max(1, s - 1))} className={`inline-flex items-center gap-1 px-4 py-2.5 rounded-xl border text-xs font-bold cursor-pointer disabled:opacity-35 ${chipOff}`}>
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>{isAr ? "السابق" : "Back"}</span>
-                  </button>
-                  {step < 3 ? (
-                    <button type="button" onClick={() => setStep((s) => s + 1)} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-extrabold cursor-pointer shadow-lg">
-                      <span>{step === 1 ? (isAr ? "التالي: الأعراض" : "Next: Symptoms") : (isAr ? "التالي: عوامل الخطورة" : "Next: Risk Traps")}</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={!remote || analyzing || Boolean(remote?.invalid_scan)}
-                      onClick={() => setShowResults(true)}
-                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-500 hover:from-cyan-500 hover:to-teal-400 text-white text-xs font-extrabold cursor-pointer shadow-lg disabled:opacity-45"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>{isAr ? "عرض التشخيص الهجين" : "Run Hybrid Diagnosis"}</span>
-                    </button>
                   )}
+
+                  {step === 3 && (
+                    <div className="space-y-2.5">
+                      <div className="text-xs font-extrabold">{isAr ? "عوامل الخطورة ومصائد الأمان:" : "Risk Factors & Clinical Safety Traps:"}</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                          { k: "anticoagulants" as const, ar: "يتناول مسيلات دم (Warfarin / DOAC)", en: "On Anticoagulants" },
+                          { k: "dvtPeRisk" as const, ar: "خطورة جلطة ساق / رئة (DVT/PE)", en: "DVT / PE Risk Factors" },
+                          { k: "malignancyOrSmoking" as const, ar: "تدخين شديد أو تاريخ أورام", en: "Heavy Smoking / Malignancy" },
+                          { k: "immunosuppressedOrTb" as const, ar: "ضعف مناعة أو مخالطة درن (TB)", en: "Immunocompromised / TB Exposure" },
+                          { k: "postProcedure" as const, ar: "بعد قسطرة مركزية / إجراء بالصدر", en: "Post Central-Line / Chest Procedure" },
+                        ].map((rf) => (
+                          <button key={rf.k} type="button" onClick={() => setCtx((p) => ({ ...p, [rf.k]: !p[rf.k] }))} className={`p-2.5 rounded-xl border text-xs font-bold text-start cursor-pointer transition ${ctx[rf.k] ? chipOn : chipOff}`}>
+                            {isAr ? rf.ar : rf.en}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unified Bottom Navigation */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                    <button type="button" disabled={step === 1} onClick={() => setStep((s) => Math.max(1, s - 1))} className={`inline-flex items-center gap-1 px-4 py-2.5 rounded-xl border text-xs font-bold cursor-pointer disabled:opacity-35 ${chipOff}`}>
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>{isAr ? "السابق" : "Back"}</span>
+                    </button>
+                    {step < 3 ? (
+                      <button type="button" onClick={() => setStep((s) => s + 1)} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-extrabold cursor-pointer shadow-lg">
+                        <span>{step === 1 ? (isAr ? "التالي: الأعراض" : "Next: Symptoms") : (isAr ? "التالي: عوامل الخطورة" : "Next: Risk Traps")}</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!remote || analyzing || Boolean(remote?.invalid_scan)}
+                        onClick={() => setShowResults(true)}
+                        className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-500 hover:from-cyan-500 hover:to-teal-400 text-white text-xs font-extrabold cursor-pointer shadow-lg disabled:opacity-45"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>{isAr ? "عرض التشخيص الهجين" : "Run Hybrid Diagnosis"}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </>
             ) : hybridResult ? (
               <div className="space-y-3">
                 {/* Safety Traps Banner */}
