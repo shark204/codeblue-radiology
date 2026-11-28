@@ -268,9 +268,12 @@ def fastapi_app():
                     })
             else:
                 probs = np.exp(lg - lg.max()); probs /= probs.sum()
+                NOISE_LABELS = {"[0]", "[1]", "[]", "optimal", "suboptimal", "0"}
                 top_idx = int(np.argmax(probs))
                 gradcam_url, focus_region = compute_gradcam(exp["model"], x, top_idx, img_bgr)
                 for j, cn in enumerate(classes):
+                    if cn.strip().lower() in NOISE_LABELS:
+                        continue
                     findings.append({
                         "code": cn.upper().replace(" ", "_"),
                         "label": cn.replace("_", " ").title(),

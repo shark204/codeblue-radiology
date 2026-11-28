@@ -239,9 +239,22 @@ def upgrade_chest_ct_and_atlas():
     # PART 1: TRUE 4-CLASS CHEST CT (Kabil007/LungCancer4Types)
     # ------------------------------------------------------------------
     print("[Part 1] Downloading Kabil007/LungCancer4Types folder tree...")
+    import zipfile, tarfile
     snap_dir = snapshot_download("Kabil007/LungCancer4Types", repo_type="dataset")
-    items, seen_h = [], set()
+    extract_dir = "/tmp/lung_ct_extracted"
+    os.makedirs(extract_dir, exist_ok=True)
     for root, _, files in os.walk(snap_dir):
+        for fn in files:
+            fp = os.path.join(root, fn)
+            if fn.lower().endswith(".zip"):
+                with zipfile.ZipFile(fp, "r") as zf:
+                    zf.extractall(extract_dir)
+            elif fn.lower().endswith((".tar", ".tar.gz", ".tgz")):
+                with tarfile.open(fp, "r:*") as tf:
+                    tf.extractall(extract_dir)
+    scan_root = extract_dir if any(os.scandir(extract_dir)) else snap_dir
+    items, seen_h = [], set()
+    for root, _, files in os.walk(scan_root):
         lbl = norm_ct_label(os.path.basename(root))
         if not lbl:
             continue
