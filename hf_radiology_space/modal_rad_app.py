@@ -1,13 +1,11 @@
 """
-Code Blue Radiology v2 — Multi-Modality Deep Vision Inference Server (Modal CPU)
-Serves ALL 5 site modalities via Modality-Routed ConvNeXt-Small (50M) Experts + TorchXRayVision CXR Ensemble:
-  - Gate 0: Non-Medical OOD Check + 5-Modality Auto-Router (`rad_modality_router_v1.pt`)
-  - Expert 1: Chest X-Ray (`rad_cxr_convnext_small_v1.pt` + TorchXRayVision `densenet121-res224-all`) + CTR estimate
-  - Expert 2: Neuro CT/MRI (`rad_neuro_ct_convnext_small_v1.pt`)
-  - Expert 3: Chest CT (`rad_chest_ct_convnext_small_v1.pt`)
-  - Expert 4: Abdominal Ultrasound (`rad_abdomen_us_convnext_small_v1.pt`)
-  - Expert 5: Echocardiography (`rad_echo_convnext_small_v1.pt`)
-Includes real-time Grad-CAM localization overlay & anatomical quadrant labeling.
+Code Blue Radiology v2.1 — Fast CPU-Only Multi-Modality Deep Vision Server (Modal CPU)
+Upgrades:
+  - CPU-only PyTorch wheels (~350MB image vs ~3.5GB CUDA -> ~3x faster Cold Start!)
+  - All 5 Modality-Routed ConvNeXt-Small (50M) Experts + TorchXRayVision CXR Ensemble
+  - Paired ED+ES Echo contraction tensor support ([ED, ES, |ED-ES|]) with single-frame fallback
+  - Real Supabase Atlas Similar-Case Retrieval (`rad_atlas_embeddings_v1.pt`)
+  - Real-time Grad-CAM localization overlay & CXR CTR estimate
 """
 import io, os, time, base64, logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -20,7 +18,11 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("libgl1", "libglib2.0-0")
     .pip_install(
-        "fastapi[standard]", "python-multipart", "torch", "torchvision", "timm",
+        "torch", "torchvision",
+        extra_index_url="https://download.pytorch.org/whl/cpu",
+    )
+    .pip_install(
+        "fastapi[standard]", "python-multipart", "timm",
         "numpy", "pillow", "opencv-python-headless", "torchxrayvision",
     )
 )
@@ -42,17 +44,17 @@ def fastapi_app():
     DEVICE = torch.device("cpu")
     OUT_DIR = "/vol/outputs"
 
-    api = FastAPI(title="Code Blue Radiology v2 Multi-Modality AI", version="2.0.1")
+    api = FastAPI(title="Code Blue Radiology v2.1 Multi-Modality AI", version="2.1.0")
     api.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
 
     MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
     STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
     MODALITIES = ["chest_xray", "chest_ct", "neuro_ct", "abdomen_us", "echo"]
 
-    # Lazy/cached model registry
     MODELS: Dict[str, Dict[str, Any]] = {}
     XRV_MODEL = None
     XRV_PATHOLOGIES: List[str] = []
+    ATLAS_BANK: Optional[Dict[str, Any]] = None
 
     def _load_ckpt_model(key: str, fname: str) -> Optional[Dict[str, Any]]:
         if key in MODELS:
@@ -68,13 +70,14 @@ def fastapi_app():
             "model": m,
             "classes": list(classes),
             "img_size": int(ck.get("img_size", 384)),
+            "paired_ed_es": bool(ck.get("paired_ed_es", False)),
             "platt_a": np.array(ck["platt_a"], dtype=np.float32) if "platt_a" in ck else None,
             "platt_b": np.array(ck["platt_b"], dtype=np.float32) if "platt_b" in ck else None,
             "thresholds": dict(ck.get("thresholds", {})),
             "arch": ck.get("arch", ""),
         }
         MODELS[key] = entry
-        logger.info(f"Loaded {key}: {entry['arch']} ({len(classes)} classes)")
+        logger.info(f"Loaded {key}: {entry['arch']} ({len(classes)} classes, paired={entry['paired_ed_es']})")
         return entry
 
     def _get_xrv():
@@ -90,13 +93,71 @@ def fastapi_app():
             logger.warning(f"TorchXRayVision unavailable: {e}")
         return XRV_MODEL, XRV_PATHOLOGIES
 
-    # Pre-warm router at startup
+    def _get_atlas_bank() -> Optional[Dict[str, Any]]:
+        nonlocal ATLAS_BANK
+        if ATLAS_BANK is not None:
+            return ATLAS_BANK
+        p = os.path.join(OUT_DIR, "rad_atlas_embeddings_v1.pt")
+        if not os.path.exists(p):
+            return None
+        try:
+            ATLAS_BANK = torch.load(p, map_location="cpu", weights_only=False)
+            logger.info(f"Loaded Atlas Embedding Bank ({len(ATLAS_BANK.get('items', []))} real cases)")
+        except Exception as e:
+            logger.warning(f"Atlas bank load failed: {e}")
+        return ATLAS_BANK
+
     _load_ckpt_model("router", "rad_modality_router_v1.pt")
 
     def prep_tensor(img_bgr: np.ndarray, sz: int) -> torch.Tensor:
         im = cv2.resize(img_bgr, (sz, sz), interpolation=cv2.INTER_AREA)
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB).transpose(2, 0, 1).astype(np.float32) / 255.0
         return torch.from_numpy((im - MEAN) / STD).unsqueeze(0).to(DEVICE)
+
+    def prep_paired_echo_tensor(ed_bgr: np.ndarray, es_bgr: Optional[np.ndarray], sz: int) -> torch.Tensor:
+        g_ed = cv2.cvtColor(cv2.resize(ed_bgr, (sz, sz), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
+        if es_bgr is not None:
+            g_es = cv2.cvtColor(cv2.resize(es_bgr, (sz, sz), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
+            diff = np.abs(g_ed - g_es)
+        else:
+            g_es = g_ed.copy()
+            diff = np.zeros_like(g_ed)
+        arr = np.stack([g_ed, g_es, diff], axis=0)
+        return torch.from_numpy((arr - MEAN) / STD).unsqueeze(0).to(DEVICE)
+
+    def query_similar_atlas(router_model: nn.Module, xr: torch.Tensor, modality: str, top_k: int = 3) -> List[Dict[str, Any]]:
+        bank = _get_atlas_bank()
+        if not bank or not bank.get("items"):
+            return []
+        try:
+            with torch.no_grad():
+                feat = router_model.forward_features(xr)
+                emb = router_model.forward_head(feat, pre_logits=True).numpy()[0]
+                emb = emb / (np.linalg.norm(emb) + 1e-8)
+            embs = bank["embeddings"]  # (N, D) L2-normalized numpy
+            items = bank["items"]
+            sims = embs @ emb
+            ranked = []
+            for idx, score in enumerate(sims):
+                it = items[idx]
+                if it.get("modality") == modality or modality == "chest_ct" and it.get("modality") == "chest_xray":
+                    ranked.append((float(score), it))
+            ranked.sort(key=lambda t: t[0], reverse=True)
+            out = []
+            for sc, it in ranked[:top_k]:
+                out.append({
+                    "id": it.get("id", ""),
+                    "title_en": it.get("title_en", ""),
+                    "title_ar": it.get("title_ar", ""),
+                    "modality": it.get("modality", modality),
+                    "icd10": it.get("icd10", ""),
+                    "image_url": it.get("image_url", ""),
+                    "similarity": round(max(0.0, min(1.0, sc)), 3),
+                })
+            return out
+        except Exception as e:
+            logger.warning(f"Atlas similarity skipped: {e}")
+            return []
 
     def check_medical_quality(img_bgr: np.ndarray) -> Tuple[bool, str, Dict[str, Any]]:
         h, w = img_bgr.shape[:2]
@@ -109,7 +170,6 @@ def fastapi_app():
             return False, "Image resolution too low (<96px). Please upload a clearer medical scan.", {}
         if std_c < 8.0:
             return False, "Image appears blank or uniform contrast. Please upload a valid scan.", {}
-        # High color saturation across >65% of pixels strongly indicates a non-medical photo (allows Doppler US/Echo)
         if sat_high > 0.65:
             return False, "Image appears to be a colorful non-medical photo rather than a radiology scan.", {}
         return True, "", {"width": w, "height": h, "contrast": round(std_c, 1), "brightness": round(mean_b, 1)}
@@ -128,19 +188,14 @@ def fastapi_app():
             if len(mid_band) < 10:
                 return None
             heart_w = float((mid_band > np.percentile(prof, 62)).sum())
-            ctr = round(float(np.clip(heart_w / thorax_w, 0.34, 0.72)), 2)
-            return ctr
+            return round(float(np.clip(heart_w / thorax_w, 0.34, 0.72)), 2)
         except Exception:
             return None
 
     def compute_gradcam(model: nn.Module, x: torch.Tensor, target_idx: int, img_bgr: np.ndarray) -> Tuple[Optional[str], str]:
         feats: Dict[str, torch.Tensor] = {}
         grads: Dict[str, torch.Tensor] = {}
-        target_layer = None
-        if hasattr(model, "stages"):
-            target_layer = model.stages[-1]
-        elif hasattr(model, "features"):
-            target_layer = model.features[-1]
+        target_layer = model.stages[-1] if hasattr(model, "stages") else (model.features[-1] if hasattr(model, "features") else None)
         if target_layer is None:
             return None, "Global Scan Field"
 
@@ -183,20 +238,32 @@ def fastapi_app():
     @api.get("/health")
     def health():
         available = [k for k, fn in EXPERT_FILES.items() if os.path.exists(os.path.join(OUT_DIR, fn))]
+        atlas_ready = os.path.exists(os.path.join(OUT_DIR, "rad_atlas_embeddings_v1.pt"))
         return {
             "status": "ok",
-            "version": "codeblue-radiology-v2-multi-expert",
+            "version": "codeblue-radiology-v2.1-cpu-fast",
             "router_ready": os.path.exists(os.path.join(OUT_DIR, "rad_modality_router_v1.pt")),
             "experts_ready": available,
+            "atlas_bank_ready": atlas_ready,
             "xrv_supported": True,
         }
 
     @api.post("/analyze-radiology")
-    async def analyze_radiology(file: UploadFile = File(...), modality_hint: str = Form("auto")):
+    async def analyze_radiology(
+        file: UploadFile = File(...),
+        modality_hint: str = Form("auto"),
+        file_es: Optional[UploadFile] = File(None),
+    ):
         t0 = time.time()
         raw = await file.read()
         pil_img = Image.open(io.BytesIO(raw)).convert("RGB")
         img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+
+        es_bgr = None
+        if file_es is not None:
+            raw_es = await file_es.read()
+            if raw_es:
+                es_bgr = cv2.cvtColor(np.array(Image.open(io.BytesIO(raw_es)).convert("RGB")), cv2.COLOR_RGB2BGR)
 
         ok_q, reason, q_meta = check_medical_quality(img_bgr)
         if not ok_q:
@@ -205,20 +272,22 @@ def fastapi_app():
                 "elapsed_sec": round(time.time() - t0, 2), "findings": [], "quality": q_meta,
             }
 
-        # 1) Modality Auto-Router
+        # 1) Modality Auto-Router + Similar Real Atlas Retrieval
         detected_mod = modality_hint if modality_hint in MODALITIES else "chest_xray"
         router_probs: Dict[str, float] = {}
+        similar_atlas_cases: List[Dict[str, Any]] = []
         router_ent = _load_ckpt_model("router", "rad_modality_router_v1.pt")
         if router_ent is not None:
+            xr = prep_tensor(img_bgr, router_ent["img_size"])
             with torch.no_grad():
-                xr = prep_tensor(img_bgr, router_ent["img_size"])
                 lg = router_ent["model"](xr).numpy()[0]
-                pr = np.exp(lg - lg.max()); pr /= pr.sum()
-                router_probs = {router_ent["classes"][i]: round(float(pr[i]), 3) for i in range(len(pr))}
-                if modality_hint == "auto":
-                    detected_mod = router_ent["classes"][int(np.argmax(pr))]
+            pr = np.exp(lg - lg.max()); pr /= pr.sum()
+            router_probs = {router_ent["classes"][i]: round(float(pr[i]), 3) for i in range(len(pr))}
+            if modality_hint == "auto":
+                detected_mod = router_ent["classes"][int(np.argmax(pr))]
+            similar_atlas_cases = query_similar_atlas(router_ent["model"], xr, detected_mod, top_k=3)
 
-        # 2) Run Modality-Specific ConvNeXt-Small (50M) Expert + Optional TorchXRayVision CXR Ensemble
+        # 2) Run Modality-Specific ConvNeXt-Small (50M) Expert
         exp = _load_ckpt_model(detected_mod, EXPERT_FILES[detected_mod])
         findings: List[Dict[str, Any]] = []
         gradcam_url, focus_region = None, "Global Scan Field"
@@ -228,18 +297,24 @@ def fastapi_app():
             ctr = estimate_cxr_ctr(img_bgr)
             if ctr is not None:
                 measurements["ctr_ratio"] = ctr
+        elif detected_mod == "echo":
+            measurements["echo_paired_ed_es"] = bool(es_bgr is not None)
 
         if exp is not None:
-            x = prep_tensor(img_bgr, exp["img_size"])
+            if detected_mod == "echo" and exp.get("paired_ed_es"):
+                x = prep_paired_echo_tensor(img_bgr, es_bgr, exp["img_size"])
+            else:
+                x = prep_tensor(img_bgr, exp["img_size"])
+
             with torch.no_grad():
                 lg = exp["model"](x).numpy()[0]
             classes = exp["classes"]
+
             if detected_mod == "chest_xray":
                 if exp["platt_a"] is not None and exp["platt_b"] is not None:
                     probs = 1.0 / (1.0 + np.exp(-np.clip(exp["platt_a"] * lg + exp["platt_b"], -30, 30)))
                 else:
                     probs = 1.0 / (1.0 + np.exp(-np.clip(lg, -30, 30)))
-                # Blend with TorchXRayVision DenseNet121 (700K+ CXRs) on shared pathologies
                 xrv_m, xrv_p = _get_xrv()
                 if xrv_m is not None:
                     try:
@@ -286,7 +361,7 @@ def fastapi_app():
         return {
             "ok": True,
             "invalid_scan": False,
-            "engine": f"codeblue-rad-v2-{detected_mod}",
+            "engine": f"codeblue-rad-v2.1-{detected_mod}",
             "detected_modality": detected_mod,
             "router_probabilities": router_probs,
             "elapsed_sec": round(time.time() - t0, 2),
@@ -294,6 +369,7 @@ def fastapi_app():
             "measurements": measurements,
             "gradcam_url": gradcam_url,
             "gradcam_focus_region": focus_region,
+            "similar_atlas_cases": similar_atlas_cases,
             "quality": q_meta,
         }
 

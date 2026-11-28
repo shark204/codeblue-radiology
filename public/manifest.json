@@ -1,0 +1,24 @@
+{
+  "name": "Code Blue Radiology",
+  "short_name": "Code Blue Rad",
+  "description": "AI Multi-Modality Radiology Diagnostic Studio (CXR, Chest CT, Brain CT/MRI, Abdomen US, Echo) & Real PACS Clinical Atlas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060913",
+  "theme_color": "#06B6D4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
