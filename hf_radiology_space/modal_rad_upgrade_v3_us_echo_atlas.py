@@ -389,11 +389,11 @@ def build_supabase_atlas_bank(supabase_url: str, supabase_key: str):
     MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
     STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
 
-    rest_url = f"{supabase_url.rstrip('/')}/rest/v1/radiology_cases?select=id,modality,icd10_code,title_en,title_ar,real_scan_image_url&limit=1000"
+    rest_url = f"{supabase_url.rstrip('/')}/rest/v1/radiology_pathology_cases?select=id,modality,icd10_code,title_en,title_ar,real_scan_image_url&limit=1000"
     req = urllib.request.Request(rest_url, headers={"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         rows = json.loads(resp.read().decode("utf-8"))
-    print(f"[Atlas Bank] Fetched {len(rows)} rows from Supabase radiology_cases")
+    print(f"[Atlas Bank] Fetched {len(rows)} rows from Supabase radiology_pathology_cases")
 
     embs, items = [], []
     for r in rows:
