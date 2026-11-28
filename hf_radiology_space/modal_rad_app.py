@@ -44,7 +44,7 @@ def fastapi_app():
     DEVICE = torch.device("cpu")
     OUT_DIR = "/vol/outputs"
 
-    api = FastAPI(title="Code Blue Radiology v2.1 Multi-Modality AI", version="2.1.0")
+    api = FastAPI(title="Code Blue Radiology v2.1 Multi-Modality AI", version="2.2.0")
     api.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
 
     MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
@@ -138,9 +138,18 @@ def fastapi_app():
             items = bank["items"]
             sims = embs @ emb
             ranked = []
+            def _norm_mod(m_str: str) -> str:
+                s = str(m_str or "").lower()
+                if "neuro" in s or "brain" in s or "head" in s: return "neuro_ct"
+                if "chest_ct" in s or "ct_chest" in s: return "chest_ct"
+                if "cxr" in s or "chest" in s or "xray" in s: return "chest_xray"
+                if "echo" in s or "cardiac" in s: return "echo"
+                if "abdomen" in s or "us" in s or "ultra" in s: return "abdomen_us"
+                return s
             for idx, score in enumerate(sims):
                 it = items[idx]
-                if it.get("modality") == modality or modality == "chest_ct" and it.get("modality") == "chest_xray":
+                im_mod = _norm_mod(it.get("modality", ""))
+                if im_mod == modality or (modality == "chest_ct" and im_mod == "chest_xray"):
                     ranked.append((float(score), it))
             ranked.sort(key=lambda t: t[0], reverse=True)
             out = []
@@ -172,6 +181,9 @@ def fastapi_app():
             return False, "Image appears blank or uniform contrast. Please upload a valid scan.", {}
         if sat_high > 0.65:
             return False, "Image appears to be a colorful non-medical photo rather than a radiology scan.", {}
+        white_ratio = float((gray > 220).mean())
+        if white_ratio > 0.55 and mean_b > 175.0:
+            return False, "Image appears to be a white document, lab report, or text screenshot rather than a radiology scan.", {}
         return True, "", {"width": w, "height": h, "contrast": round(std_c, 1), "brightness": round(mean_b, 1)}
 
     def estimate_cxr_ctr(img_bgr: np.ndarray) -> Optional[float]:
@@ -241,7 +253,7 @@ def fastapi_app():
         atlas_ready = os.path.exists(os.path.join(OUT_DIR, "rad_atlas_embeddings_v1.pt"))
         return {
             "status": "ok",
-            "version": "codeblue-radiology-v2.1-cpu-fast",
+            "version": "codeblue-radiology-v2.2-hardened",
             "router_ready": os.path.exists(os.path.join(OUT_DIR, "rad_modality_router_v1.pt")),
             "experts_ready": available,
             "atlas_bank_ready": atlas_ready,
@@ -284,6 +296,13 @@ def fastapi_app():
             pr = np.exp(lg - lg.max()); pr /= pr.sum()
             router_probs = {router_ent["classes"][i]: round(float(pr[i]), 3) for i in range(len(pr))}
             if modality_hint == "auto":
+                max_rp = float(np.max(pr))
+                if max_rp < 0.55:
+                    return {
+                        "ok": True, "invalid_scan": True,
+                        "invalid_reason": "Image does not confidently match any supported radiology modality (CXR, Chest CT, Brain CT/MRI, Abdomen US, Echo).",
+                        "elapsed_sec": round(time.time() - t0, 2), "findings": [], "router_probabilities": router_probs, "quality": q_meta,
+                    }
                 detected_mod = router_ent["classes"][int(np.argmax(pr))]
             similar_atlas_cases = query_similar_atlas(router_ent["model"], xr, detected_mod, top_k=3)
 
@@ -349,19 +368,20 @@ def fastapi_app():
                 for j, cn in enumerate(classes):
                     if cn.strip().lower() in NOISE_LABELS:
                         continue
+                    mc_thr = 0.48 if detected_mod == "abdomen_us" else 0.42
                     findings.append({
                         "code": cn.upper().replace(" ", "_"),
                         "label": cn.replace("_", " ").title(),
                         "probability": round(float(probs[j]), 4),
-                        "threshold": 0.35,
-                        "positive": bool(j == top_idx or probs[j] >= 0.30),
+                        "threshold": mc_thr,
+                        "positive": bool(probs[j] >= mc_thr),
                     })
             findings.sort(key=lambda d: d["probability"], reverse=True)
 
         return {
             "ok": True,
             "invalid_scan": False,
-            "engine": f"codeblue-rad-v2.1-{detected_mod}",
+            "engine": f"codeblue-rad-v2.2-{detected_mod}",
             "detected_modality": detected_mod,
             "router_probabilities": router_probs,
             "elapsed_sec": round(time.time() - t0, 2),
