@@ -3,7 +3,7 @@ Code Blue Radiology v2 — Multi-Modality Deep Vision Inference Server (Modal CP
 Serves ALL 5 site modalities via Modality-Routed ConvNeXt-Small (50M) Experts + TorchXRayVision CXR Ensemble:
   - Gate 0: Non-Medical OOD Check + 5-Modality Auto-Router (`rad_modality_router_v1.pt`)
   - Expert 1: Chest X-Ray (`rad_cxr_convnext_small_v1.pt` + TorchXRayVision `densenet121-res224-all`) + CTR estimate
-  - Expert 2: Neuro CT/MRI (`rad_neuro_convnext_small_v1.pt`)
+  - Expert 2: Neuro CT/MRI (`rad_neuro_ct_convnext_small_v1.pt`)
   - Expert 3: Chest CT (`rad_chest_ct_convnext_small_v1.pt`)
   - Expert 4: Abdominal Ultrasound (`rad_abdomen_us_convnext_small_v1.pt`)
   - Expert 5: Echocardiography (`rad_echo_convnext_small_v1.pt`)
@@ -42,7 +42,7 @@ def fastapi_app():
     DEVICE = torch.device("cpu")
     OUT_DIR = "/vol/outputs"
 
-    api = FastAPI(title="Code Blue Radiology v2 Multi-Modality AI", version="2.0.0")
+    api = FastAPI(title="Code Blue Radiology v2 Multi-Modality AI", version="2.0.1")
     api.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
 
     MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
@@ -175,7 +175,7 @@ def fastapi_app():
     EXPERT_FILES = {
         "chest_xray": "rad_cxr_convnext_small_v1.pt",
         "chest_ct": "rad_chest_ct_convnext_small_v1.pt",
-        "neuro_ct": "rad_neuro_convnext_small_v1.pt",
+        "neuro_ct": "rad_neuro_ct_convnext_small_v1.pt",
         "abdomen_us": "rad_abdomen_us_convnext_small_v1.pt",
         "echo": "rad_echo_convnext_small_v1.pt",
     }
