@@ -4,23 +4,23 @@ import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
-  ClipboardList,
-  Cpu,
+  BookOpen,
   Home,
   Moon,
   ScanLine,
-  Stethoscope,
   Sun,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import { RadiologyHoloCore } from "@/components/RadiologyHoloCore";
+import { useScanStore } from "@/stores/scanStore";
+import { useUIStore } from "@/stores/uiStore";
+import { useAtlasLocale } from "@/lib/atlasI18n";
+
 const ScanControls = dynamic(() => import("@/features/viewer/AxialView"), { ssr: false });
 const RadDiagnosticStudio = dynamic(
   () => import("@/features/rad/RadDiagnosticStudio").then((m) => m.RadDiagnosticStudio),
   { ssr: false }
 );
-import { useScanStore } from "@/stores/scanStore";
-import { useUIStore } from "@/stores/uiStore";
-import { useAtlasLocale } from "@/lib/atlasI18n";
 
 const MAIN_URL = process.env.NEXT_PUBLIC_MAIN_URL || "https://mrcs-bank.vercel.app";
 
@@ -50,7 +50,6 @@ export default function RadiologyHomePage() {
     window.addEventListener("cb-rad-close", onClose);
     return () => window.removeEventListener("cb-rad-close", onClose);
   }, []);
-
 
   useEffect(() => {
     try {
@@ -106,10 +105,6 @@ export default function RadiologyHomePage() {
   }
 
   if (view === "landing") {
-    const petalBase = isLight
-      ? "bg-white/90 border-slate-200/90 text-slate-800 shadow-[0_14px_30px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.9)] hover:bg-white"
-      : "bg-[#0e172c]/82 border-white/14 text-slate-100 shadow-[0_16px_34px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-[#13203d]/92";
-
     return (
       <div
         dir={isAr ? "rtl" : "ltr"}
@@ -151,7 +146,7 @@ export default function RadiologyHomePage() {
             <span className="opacity-40">•</span>
             <span>{isAr ? "دليل 12 خطوة" : "12-Step Guide"}</span>
             <span className="opacity-40">•</span>
-            <span>{isAr ? "الأقسام والحالات" : "Real Scans & Signs"}</span>
+            <span>{isAr ? "الأطلس السريري" : "Real Scans Atlas"}</span>
           </div>
 
           <div className="flex items-center gap-2 text-xs">
@@ -192,12 +187,12 @@ export default function RadiologyHomePage() {
           </div>
         </header>
 
-        {/* Single-Viewport Hero + Integrated 4-Quadrant Showcase */}
-        <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-5 md:px-10 py-4 lg:py-0 flex items-center">
+        {/* Single-Viewport 2-Column Hero */}
+        <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-5 md:px-10 py-4 lg:py-3 flex items-center overflow-y-auto lg:overflow-hidden">
           <div className="w-full grid grid-cols-1 lg:grid-cols-12 items-center gap-6 lg:gap-8">
-            {/* Left / Text + CTA + Integrated 4-Quadrant Petal Showcase */}
-            <div className="lg:col-span-6 flex flex-col gap-4">
-              <div className="space-y-2.5">
+            {/* Left Column (5 cols): Clean Headline + Rephrased Subtitle + 2 CTAs */}
+            <div className="lg:col-span-5 flex flex-col justify-center gap-4">
+              <div className="space-y-3.5">
                 <h1
                   className={`text-2xl sm:text-3xl xl:text-4xl font-black leading-[1.18] ${
                     isLight ? "text-slate-900" : "text-white"
@@ -214,126 +209,50 @@ export default function RadiologyHomePage() {
                 >
                   {isAr ? (
                     <>
-                      أطلس الحالات الإشعاعية السريرية الحقيقية{" "}
-                      <span className={isLight ? "text-sky-700 font-extrabold" : "text-sky-300 font-extrabold"}>
-                        ومحرك التحليل الذكي متعدد المراحل
+                      ارفع أي أشعة صدر أو CT أو مخ أو سونار أو إيكو للتحليل الفوري بالذكاء الاصطناعي —{" "}
+                      <span className={isLight ? "text-cyan-700 font-extrabold" : "text-cyan-300 font-extrabold"}>
+                        أو استكشف أطلس الحالات الحقيقية ودليل الـ 12 خطوة.
                       </span>
                     </>
                   ) : (
                     <>
-                      Real PACS clinical radiology atlas paired with a{" "}
-                      <span className={isLight ? "text-sky-700 font-extrabold" : "text-sky-300 font-extrabold"}>
-                        12-stage AI diagnostic reasoning engine
+                      Upload any Chest X-Ray, CT, Brain MRI, Ultrasound, or Echo for instant AI analysis —{" "}
+                      <span className={isLight ? "text-cyan-700 font-extrabold" : "text-cyan-300 font-extrabold"}>
+                        or explore the PACS Atlas &amp; 12-Step Guide.
                       </span>
                     </>
                   )}
                 </p>
-                <div className="pt-1 flex flex-wrap items-center gap-2.5">
+
+                <div className="pt-1.5 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => launchRadiology("ai-v2")}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-300 hover:from-cyan-300 hover:to-sky-200 text-slate-950 font-black text-sm sm:text-base shadow-[0_0_30px_rgba(34,211,238,0.45)] transition transform hover:scale-[1.03] active:scale-[0.99] cursor-pointer"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-300 hover:from-cyan-300 hover:to-sky-200 text-slate-950 font-black text-sm sm:text-base shadow-[0_0_28px_rgba(34,211,238,0.45)] transition transform hover:scale-[1.03] active:scale-[0.99] cursor-pointer"
                   >
-                    <span>{isAr ? "ابدأ التشخيص الذكي v2" : "AI Diagnosis Studio v2"}</span>
-                    <ArrowUpRight className="w-5 h-5" />
+                    <ScanLine className="w-4 h-4 stroke-[2.4]" />
+                    <span>{isAr ? "فحص الأشعة بالذكاء الاصطناعي" : "AI Scan & Diagnosis"}</span>
+                    <ArrowUpRight className="w-4 h-4 stroke-[2.4]" />
                   </button>
                   <button
                     type="button"
                     onClick={() => launchRadiology("atlas")}
-                    className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl border font-extrabold text-xs sm:text-sm transition cursor-pointer ${isLight ? "bg-white/85 hover:bg-white text-slate-900 border-slate-300 shadow-sm" : "bg-white/8 hover:bg-white/15 text-slate-100 border-white/15"}`}
+                    className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl border font-extrabold text-xs sm:text-sm transition cursor-pointer ${
+                      isLight
+                        ? "bg-white/85 hover:bg-white text-slate-900 border-slate-300 shadow-sm"
+                        : "bg-white/8 hover:bg-white/15 text-slate-100 border-white/15"
+                    }`}
                   >
-                    <ScanLine className="w-4 h-4 text-cyan-400" />
+                    <BookOpen className="w-4 h-4 text-cyan-400" />
                     <span>{isAr ? "الأطلس ودليل الـ 12 خطوة" : "Atlas & 12-Step Guide"}</span>
                   </button>
                 </div>
               </div>
-
-              {/* Integrated "What Does the Platform Offer?" 4-Quadrant Split-Circle Showcase (Non-clickable) */}
-              <div className="pt-1 space-y-2.5">
-                <div
-                  className={`text-xs font-extrabold uppercase tracking-wider ${
-                    isLight ? "text-cyan-700" : "text-cyan-300/90"
-                  }`}
-                >
-                  {isAr ? "ماذا تقدم المنصة؟" : "What Does the Platform Offer?"}
-                </div>
-
-                <div dir="ltr" className="grid grid-cols-2 gap-2.5 max-w-[440px]">
-                  {/* Top-Left Quadrant */}
-                  <div
-                    dir={isAr ? "rtl" : "ltr"}
-                    className={`group select-none cursor-default rounded-tl-[64px] rounded-tr-xl rounded-bl-xl rounded-br-md border backdrop-blur-xl px-4 py-3.5 pl-6 flex flex-col items-center justify-center text-center transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:border-cyan-400/60 hover:shadow-[0_18px_36px_rgba(34,211,238,0.24)] ${petalBase}`}
-                  >
-                    <div className="w-9 h-9 mb-1.5 rounded-2xl bg-cyan-500/15 border border-cyan-400/35 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition-transform duration-300">
-                      <Stethoscope className="w-5 h-5" />
-                    </div>
-                    <div className="font-extrabold text-xs sm:text-[13px] leading-snug">
-                      {isAr ? "5 أقسام إشعاعية" : "5 Imaging Modalities"}
-                    </div>
-                    <div className={`text-[10.5px] mt-0.5 ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                      {isAr ? "CXR وCT وEcho وUS" : "CXR, CT, Echo & US"}
-                    </div>
-                  </div>
-
-                  {/* Top-Right Quadrant */}
-                  <div
-                    dir={isAr ? "rtl" : "ltr"}
-                    className={`group select-none cursor-default rounded-tr-[64px] rounded-tl-xl rounded-br-xl rounded-bl-md border backdrop-blur-xl px-4 py-3.5 pr-6 flex flex-col items-center justify-center text-center transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:border-amber-400/60 hover:shadow-[0_18px_36px_rgba(245,158,11,0.22)] ${petalBase}`}
-                  >
-                    <div className="w-9 h-9 mb-1.5 rounded-2xl bg-amber-500/15 border border-amber-400/35 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform duration-300">
-                      <ClipboardList className="w-5 h-5" />
-                    </div>
-                    <div className="font-extrabold text-xs sm:text-[13px] leading-snug">
-                      {isAr ? "دليل 12 خطوة للصدر" : "12-Step CXR Guide"}
-                    </div>
-                    <div className={`text-[10.5px] mt-0.5 ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                      {isAr ? "PA/AP وحدود القلب وMRI" : "PA vs AP, contours & MRI"}
-                    </div>
-                  </div>
-
-                  {/* Bottom-Left Quadrant */}
-                  <div
-                    dir={isAr ? "rtl" : "ltr"}
-                    className={`group select-none cursor-default rounded-bl-[64px] rounded-tl-xl rounded-br-xl rounded-tr-md border backdrop-blur-xl px-4 py-3.5 pl-6 flex flex-col items-center justify-center text-center transition-all duration-300 hover:translate-y-1 hover:scale-[1.03] hover:border-emerald-400/60 hover:shadow-[0_18px_36px_rgba(16,185,129,0.22)] ${petalBase}`}
-                  >
-                    <div className="w-9 h-9 mb-1.5 rounded-2xl bg-emerald-500/15 border border-emerald-400/35 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform duration-300">
-                      <ScanLine className="w-5 h-5" />
-                    </div>
-                    <div className="font-extrabold text-xs sm:text-[13px] leading-snug">
-                      {isAr ? "+546 حالة سريرية" : "546+ Real Cases"}
-                    </div>
-                    <div className={`text-[10.5px] mt-0.5 ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                      {isAr ? "أرشيف حالات وعلامات PACS" : "Real PACS scans & signs"}
-                    </div>
-                  </div>
-
-                  {/* Bottom-Right Quadrant */}
-                  <div
-                    dir={isAr ? "rtl" : "ltr"}
-                    className={`group select-none cursor-default rounded-br-[64px] rounded-tr-xl rounded-bl-xl rounded-tl-md border backdrop-blur-xl px-4 py-3.5 pr-6 flex flex-col items-center justify-center text-center transition-all duration-300 hover:translate-y-1 hover:scale-[1.03] hover:border-violet-400/60 hover:shadow-[0_18px_36px_rgba(139,92,246,0.24)] ${petalBase}`}
-                  >
-                    <div className="w-9 h-9 mb-1.5 rounded-2xl bg-violet-500/15 border border-violet-400/35 flex items-center justify-center text-violet-400 group-hover:scale-110 transition-transform duration-300">
-                      <Cpu className="w-5 h-5" />
-                    </div>
-                    <div className="font-extrabold text-xs sm:text-[13px] leading-snug">
-                      {isAr ? "محرك التشخيص الذكي" : "AI Diagnostic Engine"}
-                    </div>
-                    <div className={`text-[10.5px] mt-0.5 ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                      {isAr ? "تشخيص تفريقي وفرز الطوارئ" : "Bayesian differential & triage"}
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Right / Transparent PNG Hero Visual (Non-clickable) */}
-            <div className="lg:col-span-6 flex items-center justify-center">
-              <img
-                src="/hero-radiology.png?v=3"
-                alt="Code Blue Radiology AI Workspace"
-                draggable={false}
-                className={`w-full max-w-[540px] max-h-[68vh] h-auto object-contain select-none pointer-events-none ${isLight ? "drop-shadow-[0_0_26px_rgba(255,255,255,0.9)]" : "drop-shadow-[0_20px_45px_rgba(56,189,248,0.28)]"}`}
-              />
+            {/* Right Column (7 cols): Electric Cyan 7-Step Holographic Radiology Core */}
+            <div className="lg:col-span-7 flex items-center justify-center">
+              <RadiologyHoloCore isAr={isAr} isLight={isLight} />
             </div>
           </div>
         </main>
@@ -364,8 +283,8 @@ export default function RadiologyHomePage() {
             onClick={() => launchRadiology(workspaceTab === "ai-v2" ? "atlas" : "ai-v2")}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/45 font-bold cursor-pointer transition"
           >
-            <ScanLine className="w-3.5 h-3.5" />
-            <span>{workspaceTab === "ai-v2" ? (isAr ? "الأطلس" : "Atlas") : (isAr ? "التشخيص v2" : "AI Studio v2")}</span>
+            {workspaceTab === "ai-v2" ? <BookOpen className="w-3.5 h-3.5" /> : <ScanLine className="w-3.5 h-3.5" />}
+            <span>{workspaceTab === "ai-v2" ? (isAr ? "الأطلس" : "Atlas") : (isAr ? "فحص الأشعة" : "AI Scan")}</span>
           </button>
           <button
             type="button"
